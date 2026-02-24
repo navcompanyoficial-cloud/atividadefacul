@@ -456,43 +456,80 @@ with tab5:
     st.pyplot(fig9)
     plt.close(fig9)
 
-    # ---------- Scatter plot — dispersão de vendas por UF ----------
-    st.markdown("### 6.2 Gráfico de Dispersão — Vendas Municipais por UF")
+    # ---------- Scatter plot — População x Vendas ----------
+    st.markdown("### 6.2 Gráfico de Dispersão — População vs Vendas de Asfalto")
 
-    top10_scatter = df.groupby("UF")["VENDAS_KG"].sum().nlargest(10).index.tolist()
-    df_scatter = df_outliers[df_outliers["UF"].isin(top10_scatter)].copy()
-    df_scatter["VENDAS_LOG"] = np.log10(df_scatter["VENDAS_KG"].clip(lower=1))
+    # Carregar dados de população IBGE
+    try:
+        df_pop = pd.read_csv("populacao_ibge_2021.csv", sep=";", encoding="utf-8")
+        df_pop["CODIGO_IBGE"] = df_pop["CODIGO_IBGE"].astype(str)
 
-    fig_sc, ax_sc = plt.subplots(figsize=(14, 7))
+        # Agregar vendas por município (total no período filtrado)
+        vendas_mun = (
+            df_outliers.groupby(["CODIGO_IBGE", "MUNICIPIO", "UF"])
+            .agg(VENDAS_TOTAL=("VENDAS_KG", "sum"), IS_OUTLIER=("IS_OUTLIER", "any"))
+            .reset_index()
+        )
+        vendas_mun["CODIGO_IBGE"] = vendas_mun["CODIGO_IBGE"].astype(str)
 
-    normais = df_scatter[~df_scatter["IS_OUTLIER"]]
-    outliers_sc = df_scatter[df_scatter["IS_OUTLIER"]]
+        # Merge com população
+        scatter_data = vendas_mun.merge(
+            df_pop[["CODIGO_IBGE", "POPULACAO_2021"]],
+            on="CODIGO_IBGE",
+            how="inner",
+        )
+        scatter_data = scatter_data[
+            (scatter_data["VENDAS_TOTAL"] > 0) & (scatter_data["POPULACAO_2021"] > 0)
+        ]
+        scatter_data["VENDAS_TON"] = scatter_data["VENDAS_TOTAL"] / 1e3
 
-    ax_sc.scatter(
-        normais["UF"], normais["VENDAS_LOG"],
-        alpha=0.3, s=10, color="steelblue", label="Normal",
-    )
-    ax_sc.scatter(
-        outliers_sc["UF"], outliers_sc["VENDAS_LOG"],
-        alpha=0.6, s=25, color="red", marker="x", label="Outlier",
-    )
+        normais = scatter_data[~scatter_data["IS_OUTLIER"]]
+        outliers_sc = scatter_data[scatter_data["IS_OUTLIER"]]
 
-    ax_sc.set_title(
-        "Dispersão de Vendas Municipais por UF (Top 10) — Outliers em Vermelho",
-        fontsize=12, fontweight="bold",
-    )
-    ax_sc.set_ylabel("log10(Vendas em kg)")
-    ax_sc.set_xlabel("UF")
-    ax_sc.legend(fontsize=9)
-    plt.xticks(rotation=0)
-    plt.tight_layout()
-    st.pyplot(fig_sc)
-    plt.close(fig_sc)
+        fig_sc, ax_sc = plt.subplots(figsize=(14, 7))
 
-    st.caption(
-        "Cada ponto é um registro município/ano. "
-        "Pontos vermelhos (✕) são outliers detectados pelo método IQR."
-    )
+        ax_sc.scatter(
+            normais["POPULACAO_2021"], normais["VENDAS_TON"],
+            alpha=0.3, s=12, color="steelblue", label="Normal",
+        )
+        ax_sc.scatter(
+            outliers_sc["POPULACAO_2021"], outliers_sc["VENDAS_TON"],
+            alpha=0.7, s=30, color="red", marker="x", label="Outlier",
+        )
+
+        ax_sc.set_xscale("log")
+        ax_sc.set_yscale("log")
+        ax_sc.set_xlabel("População (estimativa 2021 — escala log)")
+        ax_sc.set_ylabel("Vendas de Asfalto (toneladas — escala log)")
+        ax_sc.set_title(
+            "Dispersão: População vs Vendas de Asfalto por Município",
+            fontsize=12, fontweight="bold",
+        )
+        ax_sc.legend(fontsize=9)
+
+        # Anotar alguns outliers relevantes
+        top_outliers = outliers_sc.nlargest(5, "VENDAS_TON")
+        for _, row in top_outliers.iterrows():
+            ax_sc.annotate(
+                f'{row["MUNICIPIO"]}-{row["UF"]}',
+                (row["POPULACAO_2021"], row["VENDAS_TON"]),
+                fontsize=7, alpha=0.8,
+                xytext=(5, 5), textcoords="offset points",
+            )
+
+        plt.tight_layout()
+        st.pyplot(fig_sc)
+        plt.close(fig_sc)
+
+        st.caption(
+            "Cada ponto = um município. Eixo X = população, Eixo Y = vendas acumuladas de asfalto. "
+            "Tendência crescente mostra que cidades maiores compram mais. "
+            "Outliers vermelhos (✕) = municípios fora da curva (cidade pequena comprando muito, "
+            "ou cidade grande comprando acima do esperado)."
+        )
+
+    except FileNotFoundError:
+        st.warning("Arquivo populacao_ibge_2021.csv não encontrado. Scatter plot indisponível.")
 
     # ---------- 6.3 Detecção de outliers — resumo ----------
     st.markdown("### 6.3 Detecção de Outliers (IQR)")
