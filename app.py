@@ -658,6 +658,20 @@ with tab5:
         hide_index=True,
     )
 
+    n_anos = int(df["ANO"].nunique())
+    n_sempre_outlier = int((freq_outlier["VEZES_OUTLIER"] == n_anos).sum())
+    st.info(
+        f"**Por que tantos municípios aparecem com {n_anos}x?** "
+        f"O dataset cobre {n_anos} anos ({int(df['ANO'].min())}–{int(df['ANO'].max())}). "
+        f"Existem **{n_sempre_outlier} municípios** que foram classificados como outlier em "
+        f"**todos os {n_anos} anos**, sem exceção. "
+        f"São capitais e grandes polos industriais (São Paulo, Rio de Janeiro, Curitiba, "
+        f"Fortaleza, Salvador, Goiânia, etc.) que compram volumes de asfalto muito superiores "
+        f"aos demais municípios do seu estado, todos os anos. "
+        f"Isso reforça que a concentração do mercado de asfalto é **estrutural**: "
+        f"as mesmas cidades dominam há mais de 30 anos seguidos."
+    )
+
     # ---------- Resumo final por UF ----------
     st.markdown("### 6.7 Resumo consolidado por estado")
     st.markdown(
