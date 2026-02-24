@@ -472,10 +472,14 @@ with tab5:
     st.markdown("### 6.2 Quantos outliers existem nos dados?")
     st.markdown(
         "Usamos o **método IQR (Intervalo Interquartil)** para identificar outliers. "
-        "Funciona assim: para cada estado em cada ano, calculamos a faixa \"normal\" de vendas "
-        "entre os municípios. Qualquer município que venda **muito acima** dessa faixa é "
-        "considerado um **outlier** — ou seja, está \"fora da curva\".\n\n"
-        "Na prática, são geralmente capitais e grandes polos industriais que compram "
+        "Para cada estado em cada ano, o cálculo funciona assim:\n\n"
+        "1. **Ordenamos** todas as vendas dos municípios do menor para o maior.\n"
+        "2. Calculamos o **Q1** (1º quartil) — o valor abaixo do qual estão 25% dos municípios.\n"
+        "3. Calculamos o **Q3** (3º quartil) — o valor abaixo do qual estão 75% dos municípios.\n"
+        "4. **IQR = Q3 − Q1** — essa é a faixa onde estão os 50% centrais (a maioria dos municípios).\n"
+        "5. **Limite superior = Q3 + 1.5 × IQR** — qualquer município que venda acima desse limite "
+        "é considerado **outlier** (fora da curva).\n\n"
+        "Na prática, os outliers são geralmente capitais e grandes polos industriais que compram "
         "volumes de asfalto muito superiores ao restante dos municípios do estado."
     )
 
