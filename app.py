@@ -456,8 +456,46 @@ with tab5:
     st.pyplot(fig9)
     plt.close(fig9)
 
-    # ---------- 6.2 Detecção de outliers — resumo ----------
-    st.markdown("### 6.2 Detecção de Outliers (IQR)")
+    # ---------- Scatter plot — dispersão de vendas por UF ----------
+    st.markdown("### 6.2 Gráfico de Dispersão — Vendas Municipais por UF")
+
+    top10_scatter = df.groupby("UF")["VENDAS_KG"].sum().nlargest(10).index.tolist()
+    df_scatter = df_outliers[df_outliers["UF"].isin(top10_scatter)].copy()
+    df_scatter["VENDAS_LOG"] = np.log10(df_scatter["VENDAS_KG"].clip(lower=1))
+
+    fig_sc, ax_sc = plt.subplots(figsize=(14, 7))
+
+    normais = df_scatter[~df_scatter["IS_OUTLIER"]]
+    outliers_sc = df_scatter[df_scatter["IS_OUTLIER"]]
+
+    ax_sc.scatter(
+        normais["UF"], normais["VENDAS_LOG"],
+        alpha=0.3, s=10, color="steelblue", label="Normal",
+    )
+    ax_sc.scatter(
+        outliers_sc["UF"], outliers_sc["VENDAS_LOG"],
+        alpha=0.6, s=25, color="red", marker="x", label="Outlier",
+    )
+
+    ax_sc.set_title(
+        "Dispersão de Vendas Municipais por UF (Top 10) — Outliers em Vermelho",
+        fontsize=12, fontweight="bold",
+    )
+    ax_sc.set_ylabel("log10(Vendas em kg)")
+    ax_sc.set_xlabel("UF")
+    ax_sc.legend(fontsize=9)
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+    st.pyplot(fig_sc)
+    plt.close(fig_sc)
+
+    st.caption(
+        "Cada ponto é um registro município/ano. "
+        "Pontos vermelhos (✕) são outliers detectados pelo método IQR."
+    )
+
+    # ---------- 6.3 Detecção de outliers — resumo ----------
+    st.markdown("### 6.3 Detecção de Outliers (IQR)")
 
     o1, o2, o3 = st.columns(3)
     o1.metric("Total de registros", f"{total_registros:,}")
@@ -465,8 +503,8 @@ with tab5:
     pct_outliers = (total_outliers / total_registros * 100) if total_registros else 0
     o3.metric("% Outliers", f"{pct_outliers:.1f}%")
 
-    # ---------- 6.3 Impacto dos outliers ----------
-    st.markdown("### 6.3 Quanto os Outliers Explicam do Total da UF")
+    # ---------- 6.4 Impacto dos outliers ----------
+    st.markdown("### 6.4 Quanto os Outliers Explicam do Total da UF")
 
     impacto = (
         df_outliers.groupby(["ANO", "UF"])
@@ -520,7 +558,7 @@ with tab5:
     plt.close(fig10)
 
     # ---------- 6.4 Evolução temporal ----------
-    st.markdown("### 6.4 Evolução Temporal — Outliers ao Longo dos Anos")
+    st.markdown("### 6.5 Evolução Temporal — Outliers ao Longo dos Anos")
 
     top5_ufs = df.groupby("UF")["VENDAS_KG"].sum().nlargest(5).index.tolist()
 
@@ -560,7 +598,7 @@ with tab5:
     plt.close(fig11)
 
     # ---------- 6.5 Boxplot log10 top 10 UFs ----------
-    st.markdown("### 6.5 Boxplot — Top 10 UFs (escala log10)")
+    st.markdown("### 6.6 Boxplot — Top 10 UFs (escala log10)")
 
     top10_ufs_q16 = df.groupby("UF")["VENDAS_KG"].sum().nlargest(10).index.tolist()
     dados_box = df[df["UF"].isin(top10_ufs_q16)].copy()
@@ -588,7 +626,7 @@ with tab5:
     plt.close(fig12)
 
     # ---------- Tabela top 30 municípios outliers ----------
-    st.markdown("### 6.6 Top 30 Municípios Outliers Mais Frequentes")
+    st.markdown("### 6.7 Top 30 Municípios Outliers Mais Frequentes")
 
     freq_outlier = (
         df_outliers[df_outliers["IS_OUTLIER"]]
@@ -612,7 +650,7 @@ with tab5:
     )
 
     # ---------- Resumo final por UF ----------
-    st.markdown("### 6.7 Resumo Final por UF")
+    st.markdown("### 6.8 Resumo Final por UF")
 
     resumo_final = resumo_outliers_uf.sort_values("TOTAL_VENDAS_UF", ascending=False).head(15)
     resumo_final_display = resumo_final.copy()
