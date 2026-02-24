@@ -390,6 +390,12 @@ with tab5:
         "(mediana, dispersão). Aplique detecção de outliers para achar "
         "municípios 'fora da curva' e quantifique quanto eles explicam do total da UF.*"
     )
+    st.markdown(
+        "**Em outras palavras:** dentro de cada estado, a maioria dos municípios compra "
+        "pouco asfalto. Mas existem algumas cidades que compram **muito mais** que as outras "
+        "— essas são os \"outliers\" (fora da curva). Nesta seção, identificamos quem são "
+        "esses municípios e mostramos o quanto eles representam do total de vendas do estado."
+    )
 
     # ---------- helper: detectar outliers IQR ----------
     def detectar_outliers_iqr(grupo):
@@ -410,7 +416,13 @@ with tab5:
     total_registros = len(df_outliers)
     total_outliers = int(df_outliers["IS_OUTLIER"].sum())
 
-    st.markdown("### 6.1 Distribuição por UF")
+    st.markdown("### 6.1 Como as vendas se distribuem dentro de cada estado?")
+    st.markdown(
+        "Abaixo mostramos, para cada UF, dois indicadores:\n"
+        "- **Mediana**: o valor \"do meio\" das vendas municipais — metade dos municípios vende menos que isso, metade vende mais.\n"
+        "- **Coeficiente de Variação (CV%)**: mede o quanto as vendas variam entre os municípios. "
+        "Quanto maior o CV, maior a diferença entre os municípios que vendem pouco e os que vendem muito."
+    )
 
     # Estatísticas por UF/Ano
     stats_uf_ano = (
@@ -456,83 +468,16 @@ with tab5:
     st.pyplot(fig9)
     plt.close(fig9)
 
-    # ---------- Scatter plot — População x Vendas ----------
-    st.markdown("### 6.2 Gráfico de Dispersão — População vs Vendas de Asfalto")
-
-    # Carregar dados de população IBGE
-    try:
-        df_pop = pd.read_csv("populacao_ibge_2021.csv", sep=";", encoding="utf-8")
-        df_pop["CODIGO_IBGE"] = df_pop["CODIGO_IBGE"].astype(str)
-
-        # Agregar vendas por município (total no período filtrado)
-        vendas_mun = (
-            df_outliers.groupby(["CODIGO_IBGE", "MUNICIPIO", "UF"])
-            .agg(VENDAS_TOTAL=("VENDAS_KG", "sum"), IS_OUTLIER=("IS_OUTLIER", "any"))
-            .reset_index()
-        )
-        vendas_mun["CODIGO_IBGE"] = vendas_mun["CODIGO_IBGE"].astype(str)
-
-        # Merge com população
-        scatter_data = vendas_mun.merge(
-            df_pop[["CODIGO_IBGE", "POPULACAO_2021"]],
-            on="CODIGO_IBGE",
-            how="inner",
-        )
-        scatter_data = scatter_data[
-            (scatter_data["VENDAS_TOTAL"] > 0) & (scatter_data["POPULACAO_2021"] > 0)
-        ]
-        scatter_data["VENDAS_TON"] = scatter_data["VENDAS_TOTAL"] / 1e3
-
-        normais = scatter_data[~scatter_data["IS_OUTLIER"]]
-        outliers_sc = scatter_data[scatter_data["IS_OUTLIER"]]
-
-        fig_sc, ax_sc = plt.subplots(figsize=(14, 7))
-
-        ax_sc.scatter(
-            normais["POPULACAO_2021"], normais["VENDAS_TON"],
-            alpha=0.3, s=12, color="steelblue", label="Normal",
-        )
-        ax_sc.scatter(
-            outliers_sc["POPULACAO_2021"], outliers_sc["VENDAS_TON"],
-            alpha=0.7, s=30, color="red", marker="x", label="Outlier",
-        )
-
-        ax_sc.set_xscale("log")
-        ax_sc.set_yscale("log")
-        ax_sc.set_xlabel("População (estimativa 2021 — escala log)")
-        ax_sc.set_ylabel("Vendas de Asfalto (toneladas — escala log)")
-        ax_sc.set_title(
-            "Dispersão: População vs Vendas de Asfalto por Município",
-            fontsize=12, fontweight="bold",
-        )
-        ax_sc.legend(fontsize=9)
-
-        # Anotar alguns outliers relevantes
-        top_outliers = outliers_sc.nlargest(5, "VENDAS_TON")
-        for _, row in top_outliers.iterrows():
-            ax_sc.annotate(
-                f'{row["MUNICIPIO"]}-{row["UF"]}',
-                (row["POPULACAO_2021"], row["VENDAS_TON"]),
-                fontsize=7, alpha=0.8,
-                xytext=(5, 5), textcoords="offset points",
-            )
-
-        plt.tight_layout()
-        st.pyplot(fig_sc)
-        plt.close(fig_sc)
-
-        st.caption(
-            "Cada ponto = um município. Eixo X = população, Eixo Y = vendas acumuladas de asfalto. "
-            "Tendência crescente mostra que cidades maiores compram mais. "
-            "Outliers vermelhos (✕) = municípios fora da curva (cidade pequena comprando muito, "
-            "ou cidade grande comprando acima do esperado)."
-        )
-
-    except FileNotFoundError:
-        st.warning("Arquivo populacao_ibge_2021.csv não encontrado. Scatter plot indisponível.")
-
-    # ---------- 6.3 Detecção de outliers — resumo ----------
-    st.markdown("### 6.3 Detecção de Outliers (IQR)")
+    # ---------- 6.2 Detecção de outliers — resumo ----------
+    st.markdown("### 6.2 Quantos outliers existem nos dados?")
+    st.markdown(
+        "Usamos o **método IQR (Intervalo Interquartil)** para identificar outliers. "
+        "Funciona assim: para cada estado em cada ano, calculamos a faixa \"normal\" de vendas "
+        "entre os municípios. Qualquer município que venda **muito acima** dessa faixa é "
+        "considerado um **outlier** — ou seja, está \"fora da curva\".\n\n"
+        "Na prática, são geralmente capitais e grandes polos industriais que compram "
+        "volumes de asfalto muito superiores ao restante dos municípios do estado."
+    )
 
     o1, o2, o3 = st.columns(3)
     o1.metric("Total de registros", f"{total_registros:,}")
@@ -540,8 +485,15 @@ with tab5:
     pct_outliers = (total_outliers / total_registros * 100) if total_registros else 0
     o3.metric("% Outliers", f"{pct_outliers:.1f}%")
 
-    # ---------- 6.4 Impacto dos outliers ----------
-    st.markdown("### 6.4 Quanto os Outliers Explicam do Total da UF")
+    # ---------- 6.3 Impacto dos outliers ----------
+    st.markdown("### 6.3 Quanto do total de cada estado vem desses municípios \"fora da curva\"?")
+    st.markdown(
+        "O gráfico abaixo mostra, para cada UF, **qual percentual das vendas totais do estado "
+        "é explicado apenas pelos municípios outliers**.\n\n"
+        "- Barra **vermelha** (>50%): mais da metade das vendas vem de poucos municípios — altíssima concentração.\n"
+        "- Barra **laranja** (30-50%): concentração moderada.\n"
+        "- Barra **verde** (<30%): vendas mais bem distribuídas entre os municípios."
+    )
 
     impacto = (
         df_outliers.groupby(["ANO", "UF"])
@@ -595,7 +547,13 @@ with tab5:
     plt.close(fig10)
 
     # ---------- 6.4 Evolução temporal ----------
-    st.markdown("### 6.5 Evolução Temporal — Outliers ao Longo dos Anos")
+    st.markdown("### 6.4 Essa concentração mudou ao longo dos anos?")
+    st.markdown(
+        "Cada gráfico mostra como o percentual de vendas concentrado nos municípios outliers "
+        "variou de 1992 a 2024. Mostramos o Brasil como um todo e os 5 estados que mais vendem asfalto.\n\n"
+        "A linha vermelha tracejada marca 2007, quando houve uma mudança na metodologia de coleta dos dados "
+        "(antes incluía consumo próprio, depois só vendas)."
+    )
 
     top5_ufs = df.groupby("UF")["VENDAS_KG"].sum().nlargest(5).index.tolist()
 
@@ -634,8 +592,17 @@ with tab5:
     st.pyplot(fig11)
     plt.close(fig11)
 
-    # ---------- 6.5 Boxplot log10 top 10 UFs ----------
-    st.markdown("### 6.6 Boxplot — Top 10 UFs (escala log10)")
+    # ---------- 6.5 Boxplot top 10 UFs ----------
+    st.markdown("### 6.5 Visualizando a dispersão: Boxplot das Top 10 UFs")
+    st.markdown(
+        "O boxplot (\"gráfico de caixa\") é uma das melhores formas de visualizar a distribuição dos dados. "
+        "Para cada estado:\n"
+        "- A **caixa** representa onde estão os 50% centrais dos municípios (vendas \"normais\").\n"
+        "- A **linha no meio** da caixa é a mediana.\n"
+        "- Os **pontinhos** fora da caixa são os **outliers** — municípios que vendem muito acima do padrão.\n\n"
+        "Usamos escala logarítmica (log10) porque a diferença entre o menor e o maior município "
+        "é enorme — sem essa escala, não seria possível enxergar os menores."
+    )
 
     top10_ufs_q16 = df.groupby("UF")["VENDAS_KG"].sum().nlargest(10).index.tolist()
     dados_box = df[df["UF"].isin(top10_ufs_q16)].copy()
@@ -663,7 +630,12 @@ with tab5:
     plt.close(fig12)
 
     # ---------- Tabela top 30 municípios outliers ----------
-    st.markdown("### 6.7 Top 30 Municípios Outliers Mais Frequentes")
+    st.markdown("### 6.6 Quem são os municípios \"fora da curva\"?")
+    st.markdown(
+        "A tabela abaixo lista os 30 municípios que **mais vezes foram identificados como outlier** "
+        "ao longo dos anos. A coluna \"Vezes Outlier\" mostra em quantos anos aquele município "
+        "apareceu fora da curva — quanto maior, mais consistentemente ele domina as vendas no seu estado."
+    )
 
     freq_outlier = (
         df_outliers[df_outliers["IS_OUTLIER"]]
@@ -687,7 +659,13 @@ with tab5:
     )
 
     # ---------- Resumo final por UF ----------
-    st.markdown("### 6.8 Resumo Final por UF")
+    st.markdown("### 6.7 Resumo consolidado por estado")
+    st.markdown(
+        "Tabela com os 15 maiores estados em vendas de asfalto, mostrando:\n"
+        "- **% Médio Vendas por Outliers**: em média, quanto das vendas do estado vem dos municípios fora da curva.\n"
+        "- **Média Outliers/Ano**: quantos municípios são classificados como outlier por ano naquele estado.\n"
+        "- **Total Vendas UF**: volume total de asfalto vendido no estado em todo o período."
+    )
 
     resumo_final = resumo_outliers_uf.sort_values("TOTAL_VENDAS_UF", ascending=False).head(15)
     resumo_final_display = resumo_final.copy()
@@ -707,20 +685,32 @@ with tab5:
     ]
     st.dataframe(resumo_final_display, use_container_width=True, hide_index=True)
 
+    st.markdown("### Conclusões — O que aprendemos com essa análise?")
     st.markdown(
         """
-### Conclusões
+**1. O mercado de asfalto é extremamente concentrado em poucos municípios.**
+Em quase todos os estados, um pequeno grupo de cidades (geralmente a capital e grandes polos
+industriais) compra a maior parte do asfalto. Isso faz sentido: cidades maiores têm mais
+ruas, estradas e obras de infraestrutura, então naturalmente demandam mais asfalto.
 
-1. **Alta concentração em poucos municípios**: Na maioria das UFs, um pequeno grupo
-   de municípios (geralmente capitais e polos industriais) responde por parcela
-   significativa das vendas.
-2. **Capitais dominam**: São Paulo, Rio de Janeiro, Belo Horizonte, Salvador e Goiânia
-   aparecem consistentemente como outliers.
-3. **Dispersão varia por UF**: UFs com maior diversidade econômica (SP, MG) têm menor
-   concentração relativa nos outliers.
-4. **Padrão estável no tempo**: A concentração se mantém relativamente constante.
-5. **Mudança metodológica (2007)**: Afeta volumes absolutos mas não o padrão de concentração.
+**2. As mesmas cidades dominam há mais de 30 anos.**
+Municípios como São Paulo, Rio de Janeiro, Belo Horizonte, Salvador e Goiânia aparecem
+como outliers em praticamente todos os anos analisados (1992 a 2024). Isso mostra que
+a estrutura do mercado de asfalto no Brasil é estável — não houve grandes mudanças
+de quem compra mais.
 
-**Método**: IQR (1.5×) aplicado por UF × ANO.
+**3. Em alguns estados, mais da metade das vendas vem de 2 ou 3 cidades.**
+Estados menores ou com economia concentrada na capital apresentam altíssima dependência
+de poucos municípios. Já estados como SP e MG, que têm mais cidades grandes, possuem
+vendas um pouco mais distribuídas.
+
+**4. A mudança de metodologia em 2007 não alterou esse padrão.**
+Em 2007, os dados passaram a registrar somente vendas (antes incluíam consumo próprio).
+Isso mudou os volumes absolutos, mas a concentração em poucos municípios continuou igual.
+
+**Como fizemos a análise?**
+Utilizamos o método estatístico **IQR (Intervalo Interquartil)**, aplicado para cada
+estado em cada ano. Esse método calcula a faixa normal de vendas e identifica automaticamente
+quais municípios estão muito acima dessa faixa — os chamados outliers.
 """
     )
