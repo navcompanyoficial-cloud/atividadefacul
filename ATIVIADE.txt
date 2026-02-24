@@ -1,0 +1,147 @@
+Dados obrigatórios:
+
+
+
+Dataset: “vendas-anuais-de-asfalto-por-municipio” (CSV; separador “;”).
+
+
+
+Metadado: “metadados-vendas-anuais-de-asfalto-por-municipio”.
+
+
+
+Campos (conforme metadado): ANO, GRANDE REGIÃO, UF, MUNICÍPIO, CÓDIGO IBGE, VENDAS (kg). Observação importante: há mudança metodológica em 2007 (até 2006 inclui vendas + consumo próprio; a partir de 2007 inclui apenas vendas).
+
+
+
+Preparação/ETL: importação do CSV, tipagem correta, tratamento de inconsistências (ex.: valores negativos, nomes, etc.) e registro do que foi feito.
+
+
+
+Modelo BI: modelo estrela (FatoVendasAsfalto + dimensões de Tempo(ANO), Localidade(CÓDIGO IBGE/MUNICÍPIO), UF e Região).
+
+
+
+Métricas: pelo menos 6 medidas, incluindo Total Vendas, Vendas ano a ano, % Participação (região/UF), Ranking e Média móvel (3 anos).
+
+
+
+Dashboard: no mínimo 3 páginas (Visão Geral Brasil; Recorte geográfico; Série temporal/insights), com filtros por ANO, REGIÃO e UF.
+
+
+
+Objetivo: cada grupo deve construir um mini-projeto que una modelagem/visualização (BI) e uma etapa de análise “inteligente” (IA/ML) para responder à pergunta do seu grupo usando somente os dados do dataset (dados externos podem ser citados apenas como contextualização, mas a resposta tem que se sustentar no CSV).
+
+
+
+Pergunta 01 — Brasil (tendência + ruptura)
+
+“Quais são os pontos de mudança (rupturas) mais relevantes na série nacional de VENDAS (kg) de 1992 a 2024? Detecte automaticamente mudanças de regime e quantifique impacto (antes vs. depois).”
+
+
+
+Pergunta 02 — Participação regional ao longo do tempo
+
+“Como evoluiu a participação (%) de cada GRANDE REGIÃO nas vendas totais do Brasil? Houve troca de liderança entre regiões em algum período? Mostre quando e por quanto.”
+
+
+
+Pergunta 03 — Ranking de UFs e estabilidade
+
+“Quais UFs dominaram o ranking de vendas por década (1992–2001, 2002–2011, 2012–2021, 2022–2024)? Meça a estabilidade do ranking (ex.: correlação de rankings) e identifique ‘novos entrantes’.”
+
+
+
+Pergunta 04 — Concentração (80/20) e desigualdade municipal
+
+“Em cada ano, qual a fatia das vendas concentrada nos Top 1%, Top 5% e Top 10% de municípios? Calcule um indicador de concentração (ex.: HHI ou Gini) e mostre a tendência.”
+
+
+
+Pergunta 05 — Municípios “emergentes” (crescimento)
+
+“Quais municípios tiveram maior CAGR de vendas nos últimos 10 anos disponíveis (ex.: 2015–2024), considerando um volume mínimo inicial para evitar ‘milagre estatístico’? Liste Top 20 e mostre mapa/cluster.”
+
+
+
+Pergunta 06 — Volatilidade municipal
+
+“Quais municípios apresentam maior volatilidade de vendas no período pós-2007 (para reduzir efeito metodológico)? Use uma métrica de volatilidade (ex.: coeficiente de variação) e detecte padrões.”
+
+
+
+Pergunta 07 — Previsão nacional (forecast)
+
+“Preveja as vendas nacionais para 2025–2027 usando modelo de série temporal. Faça backtesting (treina até um ano, testa no seguinte) e reporte erro (MAPE/RMSE).”
+
+
+
+Pergunta 08 — Previsão comparativa entre regiões
+
+“Compare previsões 2025–2027 para duas regiões: SUDESTE vs. NORDESTE. Qual tende a crescer mais (absoluto e %) e como muda a participação relativa?”
+
+
+
+Pergunta 09 — Anomalias e correções (inclui valores negativos)
+
+“Identifique automaticamente anomalias municipais/anuais (picos, quedas bruscas e valores negativos). Classifique por tipo (outlier, possível ajuste, etc.) e proponha regra de tratamento no ETL, mostrando efeito nos totais.”
+
+
+
+Pergunta 10 — Clusterização de trajetórias
+
+“Clusterize municípios por ‘perfil de trajetória’ de vendas (ex.: crescente, decrescente, estável, intermitente). Caracterize cada cluster por região/UF e participação no total.”
+
+
+
+Pergunta 11 — Classificação de nível de vendas
+
+“Crie classes de vendas municipais por ano (ex.: baixa/média/alta via quantis) e treine um modelo para prever a classe usando variáveis disponíveis (ANO, UF, REGIÃO e histórico do município). Avalie desempenho.”
+
+
+
+Pergunta 12 — Similaridade (municípios parecidos)
+
+“Escolha um município de grande volume (ex.: capital) e encontre os 10 municípios mais similares em padrão temporal (distância/correlação). Mostre semelhanças/diferenças e onde estão no Brasil.”
+
+
+
+Pergunta 13 — Governança: inconsistência de nomes vs. CÓDIGO IBGE
+
+“Há CÓDIGO IBGE associado a mais de um nome de MUNICÍPIO ao longo do tempo. Detecte esses casos, proponha uma ‘dimensão mestre’ (chave IBGE) e mostre como evitar duplicidade em análises.”
+
+
+
+Pergunta 14 — Capilaridade do mercado
+
+“Como evoluiu o número de municípios com vendas > 0 por ano (Brasil e por região)? Modele a tendência e identifique períodos de expansão/contração geográfica.”
+
+
+
+Pergunta 15 — ‘Churn’ do Top 100
+
+“Monte o Top 100 municípios por vendas em cada ano e calcule churn (entradas/saídas) anual. Quais regiões/UFs têm Top 100 mais estável? Modele probabilidade de permanência.”
+
+
+
+Pergunta 16 — Outliers por UF
+
+“Para cada UF, analise distribuição de vendas municipais por ano (mediana, dispersão). Aplique detecção de outliers para achar municípios ‘fora da curva’ e quantifique quanto eles explicam do total da UF.”
+
+
+
+Pergunta 17 — Detecção de mudanças por região
+
+“Para cada GRANDE REGIÃO, detecte automaticamente anos de mudança estrutural na série (change point). Compare quais regiões mudam antes/depois e com maior intensidade.”
+
+
+
+Pergunta 18 — Cenário de risco de concentração
+
+“Simule cenários: se os Top 10 municípios do Brasil reduzirem 10% (ou 20%) em um ano, qual o impacto no total nacional e por região? Crie um painel de sensibilidade e recomende foco de monitoramento.”
+
+
+
+Pergunta 19 — Sistema de monitoramento (BI operacional + alerta)
+
+“Defina regras e/ou modelo para alertar quedas anormais (ex.: queda > X% vs. média móvel 3 anos) por UF e por município. Entregue um painel com ‘semáforo’ e lista de alertas priorizados.”
