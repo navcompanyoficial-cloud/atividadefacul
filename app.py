@@ -47,9 +47,44 @@ def load_and_transform():
     df["METODOLOGIA"] = df["ANO"].apply(
         lambda x: "VENDAS+CONSUMO" if x <= 2006 else "SOMENTE VENDAS"
     )
-    # Drop rows where UF is NaN
     df = df.dropna(subset=["UF", "GRANDE_REGIAO"]).copy()
     return df
+
+
+@st.cache_data
+def build_star_model(_df):
+    """Constrói o modelo estrela a partir do dataframe limpo."""
+    # DimTempo
+    dim_tempo = _df[["ANO"]].drop_duplicates().sort_values("ANO").reset_index(drop=True)
+    dim_tempo["ID_TEMPO"] = dim_tempo.index + 1
+    dim_tempo["DECADA"] = (dim_tempo["ANO"] // 10) * 10
+    dim_tempo["METODOLOGIA"] = dim_tempo["ANO"].apply(
+        lambda x: "VENDAS+CONSUMO" if x <= 2006 else "SOMENTE VENDAS"
+    )
+
+    # DimRegiao
+    dim_regiao = _df[["GRANDE_REGIAO"]].drop_duplicates().dropna().sort_values(
+        "GRANDE_REGIAO"
+    ).reset_index(drop=True)
+    dim_regiao["ID_REGIAO"] = dim_regiao.index + 1
+
+    # DimUF
+    dim_uf = _df[["UF", "GRANDE_REGIAO"]].drop_duplicates().dropna().sort_values(
+        "UF"
+    ).reset_index(drop=True)
+    dim_uf["ID_UF"] = dim_uf.index + 1
+    dim_uf = dim_uf.merge(dim_regiao[["GRANDE_REGIAO", "ID_REGIAO"]], on="GRANDE_REGIAO")
+
+    # DimLocalidade
+    dim_localidade = _df[["CODIGO_IBGE", "MUNICIPIO", "UF"]].drop_duplicates(
+        subset=["CODIGO_IBGE"]
+    ).sort_values("CODIGO_IBGE").reset_index(drop=True)
+    dim_localidade["ID_LOCALIDADE"] = dim_localidade.index + 1
+
+    # FatoVendas (contagem)
+    n_fato = len(_df)
+
+    return dim_tempo, dim_regiao, dim_uf, dim_localidade, n_fato
 
 
 df_full = load_and_transform()
@@ -112,7 +147,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Visão Geral Brasil",
     "🗺️ Recorte Geográfico",
     "📈 Série Temporal",
-    "📋 Métricas",
+    "🗂️ ETL & Modelo Estrela",
     "🔍 Pergunta 16 — Outliers",
 ])
 
@@ -122,6 +157,23 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.header("Visão Geral Brasil")
 
+    # --- KPIs no topo (dados completos) ---
+    vendas_ano_full = df_full.groupby("ANO")["VENDAS_KG"].sum().reset_index()
+    total_vendas_brasil = df_full["VENDAS_KG"].sum()
+    ultimo_ano = int(vendas_ano_full["ANO"].max())
+    penultimo_ano = ultimo_ano - 1
+    vendas_ultimo = vendas_ano_full[vendas_ano_full["ANO"] == ultimo_ano]["VENDAS_KG"].values[0]
+    vendas_penultimo = vendas_ano_full[vendas_ano_full["ANO"] == penultimo_ano]["VENDAS_KG"].values[0]
+    variacao = ((vendas_ultimo - vendas_penultimo) / vendas_penultimo) * 100
+
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Total Vendas (1992-2024)", f"{total_vendas_brasil / 1e9:.2f} bi kg")
+    k2.metric(f"Vendas {ultimo_ano}", f"{vendas_ultimo / 1e9:.2f} bi kg")
+    k3.metric(f"Variação {penultimo_ano}→{ultimo_ano}", f"{variacao:+.1f}%")
+
+    st.markdown("---")
+
+    # --- Dashboard 4 gráficos ---
     vendas_ano = df.groupby("ANO")["VENDAS_KG"].sum().reset_index()
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 10))
@@ -208,83 +260,13 @@ with tab2:
         st.pyplot(fig2)
         plt.close(fig2)
 
-# ══════════════════════════════════════════════
-# TAB 3 — Série Temporal
-# ══════════════════════════════════════════════
-with tab3:
-    st.header("Série Temporal & Insights")
-
-    vendas_ano_ts = df.groupby("ANO")["VENDAS_KG"].sum().reset_index()
-    vendas_ano_ts["MEDIA_MOVEL_3A"] = (
-        vendas_ano_ts["VENDAS_KG"].rolling(window=3, center=False).mean()
-    )
-    vendas_ano_ts["VARIACAO_PCT"] = vendas_ano_ts["VENDAS_KG"].pct_change() * 100
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig3, ax3 = plt.subplots(figsize=(8, 5))
-        ax3.plot(
-            vendas_ano_ts["ANO"], vendas_ano_ts["VENDAS_KG"] / 1e9,
-            marker="o", markersize=4, label="Vendas",
-        )
-        ax3.plot(
-            vendas_ano_ts["ANO"], vendas_ano_ts["MEDIA_MOVEL_3A"] / 1e9,
-            color="red", linewidth=2, label="Média Móvel 3A",
-        )
-        ax3.axvline(x=2006.5, color="gray", linestyle="--", alpha=0.7, label="Mudança metod.")
-        ax3.set_title("Série Temporal + Média Móvel 3 Anos")
-        ax3.set_ylabel("Bilhões kg")
-        ax3.legend(fontsize=8)
-        plt.tight_layout()
-        st.pyplot(fig3)
-        plt.close(fig3)
-
-    with col2:
-        fig4, ax4 = plt.subplots(figsize=(8, 5))
-        cores = [
-            "green" if v >= 0 else "red"
-            for v in vendas_ano_ts["VARIACAO_PCT"].fillna(0)
-        ]
-        ax4.bar(
-            vendas_ano_ts["ANO"],
-            vendas_ano_ts["VARIACAO_PCT"].fillna(0),
-            color=cores, alpha=0.8,
-        )
-        ax4.axhline(y=0, color="black", linewidth=0.5)
-        ax4.set_title("Variação % Ano a Ano")
-        ax4.set_ylabel("Variação (%)")
-        plt.tight_layout()
-        st.pyplot(fig4)
-        plt.close(fig4)
-
-# ══════════════════════════════════════════════
-# TAB 4 — Métricas
-# ══════════════════════════════════════════════
-with tab4:
-    st.header("Métricas")
-
-    # KPIs — usando dados COMPLETOS (sem filtro)
-    vendas_ano_full = df_full.groupby("ANO")["VENDAS_KG"].sum().reset_index()
-    total_vendas_brasil = df_full["VENDAS_KG"].sum()
-    ultimo_ano = vendas_ano_full["ANO"].max()
-    penultimo_ano = ultimo_ano - 1
-    vendas_ultimo = vendas_ano_full[vendas_ano_full["ANO"] == ultimo_ano]["VENDAS_KG"].values[0]
-    vendas_penultimo = vendas_ano_full[vendas_ano_full["ANO"] == penultimo_ano]["VENDAS_KG"].values[0]
-    variacao = ((vendas_ultimo - vendas_penultimo) / vendas_penultimo) * 100
-
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Total Vendas (1992-2024)", f"{total_vendas_brasil / 1e9:.2f} bi kg")
-    k2.metric(f"Vendas {ultimo_ano}", f"{vendas_ultimo / 1e9:.2f} bi kg")
-    k3.metric(f"Variação {penultimo_ano}→{ultimo_ano}", f"{variacao:+.1f}%")
-
     st.markdown("---")
 
-    # Gráficos de métricas — usando dados FILTRADOS
-    col_m1, col_m2 = st.columns(2)
+    # --- Métricas integradas: Participação % ---
+    col_c, col_d = st.columns(2)
 
-    # Métrica 3 — Participação % por região (area chart)
-    with col_m1:
+    # Participação % por região (area chart)
+    with col_c:
         st.subheader("Participação % por Região")
         vendas_regiao_ano = df.groupby(["ANO", "GRANDE_REGIAO"])["VENDAS_KG"].sum().reset_index()
         total_por_ano = df.groupby("ANO")["VENDAS_KG"].sum().reset_index().rename(
@@ -308,8 +290,8 @@ with tab4:
         st.pyplot(fig5)
         plt.close(fig5)
 
-    # Métrica 4 — Participação % top 10 UFs
-    with col_m2:
+    # Participação % top 10 UFs
+    with col_d:
         st.subheader("Participação % Top 10 UFs")
         vendas_uf_ano = df.groupby(["ANO", "UF"])["VENDAS_KG"].sum().reset_index()
         vendas_uf_ano = vendas_uf_ano.merge(total_por_ano, on="ANO")
@@ -330,55 +312,200 @@ with tab4:
         st.pyplot(fig6)
         plt.close(fig6)
 
-    col_m3, col_m4 = st.columns(2)
+# ══════════════════════════════════════════════
+# TAB 3 — Série Temporal
+# ══════════════════════════════════════════════
+with tab3:
+    st.header("Série Temporal & Insights")
 
-    # Métrica 5 — Ranking top 10 UFs
-    with col_m3:
-        st.subheader("Evolução do Ranking Top 10 UFs")
-        vendas_uf_ano["RANKING"] = (
-            vendas_uf_ano.groupby("ANO")["VENDAS_KG"]
-            .rank(ascending=False, method="min")
-            .astype(int)
-        )
-        ranking_top10 = vendas_uf_ano[vendas_uf_ano["UF"].isin(top10_ufs)].pivot(
-            index="ANO", columns="UF", values="RANKING"
-        )
+    vendas_ano_ts = df.groupby("ANO")["VENDAS_KG"].sum().reset_index()
+    vendas_ano_ts["MEDIA_MOVEL_3A"] = (
+        vendas_ano_ts["VENDAS_KG"].rolling(window=3, center=False).mean()
+    )
+    vendas_ano_ts["VARIACAO_PCT"] = vendas_ano_ts["VENDAS_KG"].pct_change() * 100
 
-        fig7, ax7 = plt.subplots(figsize=(8, 5))
-        for uf in top10_ufs:
-            if uf in ranking_top10.columns:
-                ax7.plot(ranking_top10.index, ranking_top10[uf], marker=".", label=uf, linewidth=2)
-        ax7.invert_yaxis()
-        ax7.set_yticks(range(1, 11))
-        ax7.set_title("Evolução do Ranking")
-        ax7.set_ylabel("Posição")
-        ax7.legend(title="UF", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=7)
-        plt.tight_layout()
-        st.pyplot(fig7)
-        plt.close(fig7)
+    col1, col2 = st.columns(2)
 
-    # Métrica 6 — Média Móvel 3 anos
-    with col_m4:
-        st.subheader("Vendas Brasil + Média Móvel 3 Anos")
-        vendas_ano_m = df.groupby("ANO")["VENDAS_KG"].sum().reset_index()
-        vendas_ano_m["MM3"] = vendas_ano_m["VENDAS_KG"].rolling(window=3).mean()
-
-        fig8, ax8 = plt.subplots(figsize=(8, 5))
-        ax8.bar(
-            vendas_ano_m["ANO"], vendas_ano_m["VENDAS_KG"] / 1e9,
+    # Série temporal + média móvel
+    with col1:
+        fig3, ax3 = plt.subplots(figsize=(8, 5))
+        ax3.bar(
+            vendas_ano_ts["ANO"], vendas_ano_ts["VENDAS_KG"] / 1e9,
             alpha=0.5, color="steelblue", label="Vendas Anuais",
         )
-        ax8.plot(
-            vendas_ano_m["ANO"], vendas_ano_m["MM3"] / 1e9,
+        ax3.plot(
+            vendas_ano_ts["ANO"], vendas_ano_ts["MEDIA_MOVEL_3A"] / 1e9,
             color="red", linewidth=2.5, label="Média Móvel 3A",
         )
-        ax8.axvline(x=2006.5, color="gray", linestyle="--", alpha=0.7, label="Mudança metod.")
-        ax8.set_ylabel("Bilhões kg")
-        ax8.set_title("Média Móvel 3 Anos")
-        ax8.legend(fontsize=8)
+        ax3.axvline(x=2006.5, color="gray", linestyle="--", alpha=0.7, label="Mudança metod.")
+        ax3.set_title("Série Temporal + Média Móvel 3 Anos")
+        ax3.set_ylabel("Bilhões kg")
+        ax3.legend(fontsize=8)
         plt.tight_layout()
-        st.pyplot(fig8)
-        plt.close(fig8)
+        st.pyplot(fig3)
+        plt.close(fig3)
+
+    # Variação % ano a ano
+    with col2:
+        fig4, ax4 = plt.subplots(figsize=(8, 5))
+        cores = [
+            "green" if v >= 0 else "red"
+            for v in vendas_ano_ts["VARIACAO_PCT"].fillna(0)
+        ]
+        ax4.bar(
+            vendas_ano_ts["ANO"],
+            vendas_ano_ts["VARIACAO_PCT"].fillna(0),
+            color=cores, alpha=0.8,
+        )
+        ax4.axhline(y=0, color="black", linewidth=0.5)
+        ax4.set_title("Variação % Ano a Ano")
+        ax4.set_ylabel("Variação (%)")
+        plt.tight_layout()
+        st.pyplot(fig4)
+        plt.close(fig4)
+
+    st.markdown("---")
+
+    # --- Métrica integrada: Ranking top 10 UFs ---
+    st.subheader("Evolução do Ranking Top 10 UFs")
+
+    vendas_uf_ano_r = df.groupby(["ANO", "UF"])["VENDAS_KG"].sum().reset_index()
+    vendas_uf_ano_r["RANKING"] = (
+        vendas_uf_ano_r.groupby("ANO")["VENDAS_KG"]
+        .rank(ascending=False, method="min")
+        .astype(int)
+    )
+    top10_ufs_r = df.groupby("UF")["VENDAS_KG"].sum().nlargest(10).index.tolist()
+    ranking_top10 = vendas_uf_ano_r[vendas_uf_ano_r["UF"].isin(top10_ufs_r)].pivot(
+        index="ANO", columns="UF", values="RANKING"
+    )
+
+    fig7, ax7 = plt.subplots(figsize=(14, 5))
+    for uf in top10_ufs_r:
+        if uf in ranking_top10.columns:
+            ax7.plot(ranking_top10.index, ranking_top10[uf], marker=".", label=uf, linewidth=2)
+    ax7.invert_yaxis()
+    ax7.set_yticks(range(1, 11))
+    ax7.set_title("Evolução do Ranking")
+    ax7.set_ylabel("Posição")
+    ax7.legend(title="UF", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+    plt.tight_layout()
+    st.pyplot(fig7)
+    plt.close(fig7)
+
+# ══════════════════════════════════════════════
+# TAB 4 — ETL & Modelo Estrela
+# ══════════════════════════════════════════════
+with tab4:
+    st.header("ETL & Modelo Estrela")
+
+    # --- Registro do ETL ---
+    st.subheader("Processo de ETL")
+    st.markdown(
+        "O ETL (Extração, Transformação e Carga) foi aplicado sobre o CSV original "
+        "para preparar os dados para análise:"
+    )
+
+    etl_data = {
+        "Etapa": [
+            "Importação",
+            "Renomeação",
+            "Tipagem",
+            "Limpeza de strings",
+            "Coluna PRODUTO",
+            "Valores negativos",
+            "Valores nulos (UF/Região)",
+            "Flag metodologia",
+            "Duplicatas",
+        ],
+        "Ação": [
+            "read_csv com sep=';'",
+            "Colunas renomeadas sem espaço/acento",
+            "ANO→int, VENDAS_KG→int, CODIGO_IBGE→str",
+            ".str.strip() em todas colunas texto",
+            "Removida (sempre 'ASFALTO')",
+            "8 registros substituídos por 0",
+            f"{len(df_full) - len(df_full)} registros removidos",
+            "Coluna METODOLOGIA criada",
+            "Verificadas por CODIGO_IBGE + ANO",
+        ],
+        "Detalhe": [
+            f"{len(df_full):,} registros carregados",
+            "Facilita manipulação no código",
+            "Tipos corretos para cálculos",
+            "Remove espaços extras",
+            "Redundante — só havia 'ASFALTO'",
+            "Ajustes/estornos contábeis",
+            "Registros com município '*' e UF/Região ausente",
+            "Até 2006: vendas+consumo | A partir de 2007: só vendas",
+            "Nenhuma duplicata encontrada",
+        ],
+    }
+    st.dataframe(pd.DataFrame(etl_data), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # --- Modelo Estrela ---
+    st.subheader("Modelo Estrela (Star Schema)")
+    st.markdown(
+        "O modelo estrela organiza os dados em uma **tabela fato** central "
+        "(com as medidas de vendas) cercada por **tabelas dimensão** "
+        "(que descrevem o contexto: quando, onde, qual estado, qual região)."
+    )
+
+    st.code(
+        """
+              DimTempo (ANO, Década, Metodologia)
+                         │
+DimRegiao ──── FatoVendasAsfalto ──── DimUF
+                         │
+              DimLocalidade (Código IBGE, Município)
+        """,
+        language=None,
+    )
+
+    # Construir modelo
+    dim_tempo, dim_regiao, dim_uf, dim_localidade, n_fato = build_star_model(df_full)
+
+    st.markdown("---")
+
+    # Mostrar dimensões
+    col_d1, col_d2 = st.columns(2)
+
+    with col_d1:
+        st.markdown("**DimTempo** — Dimensão de Tempo")
+        st.caption(f"{len(dim_tempo)} registros (1 por ano)")
+        st.dataframe(dim_tempo, use_container_width=True, hide_index=True)
+
+    with col_d2:
+        st.markdown("**DimRegiao** — Dimensão de Região")
+        st.caption(f"{len(dim_regiao)} registros")
+        st.dataframe(dim_regiao, use_container_width=True, hide_index=True)
+
+    col_d3, col_d4 = st.columns(2)
+
+    with col_d3:
+        st.markdown("**DimUF** — Dimensão de Unidade Federativa")
+        st.caption(f"{len(dim_uf)} registros")
+        st.dataframe(
+            dim_uf[["ID_UF", "UF", "GRANDE_REGIAO", "ID_REGIAO"]],
+            use_container_width=True, hide_index=True,
+        )
+
+    with col_d4:
+        st.markdown("**DimLocalidade** — Dimensão de Município")
+        st.caption(f"{len(dim_localidade):,} registros (amostra abaixo)")
+        st.dataframe(
+            dim_localidade[["ID_LOCALIDADE", "CODIGO_IBGE", "MUNICIPIO", "UF"]].head(20),
+            use_container_width=True, hide_index=True,
+        )
+
+    st.markdown("---")
+    st.markdown("**FatoVendasAsfalto** — Tabela Fato")
+    st.caption(
+        f"{n_fato:,} registros | Chaves: ID_TEMPO, ID_LOCALIDADE, ID_UF, ID_REGIAO | "
+        f"Medida: VENDAS_KG"
+    )
 
 # ══════════════════════════════════════════════
 # TAB 5 — Pergunta 16: Outliers por UF
